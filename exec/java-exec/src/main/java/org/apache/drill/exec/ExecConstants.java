@@ -651,6 +651,10 @@ public final class ExecConstants {
   public static final OptionValidator HIVE_OPTIMIZE_PARQUET_SCAN_WITH_NATIVE_READER_VALIDATOR =
       new BooleanValidator(HIVE_OPTIMIZE_PARQUET_SCAN_WITH_NATIVE_READER,
           new OptionDescription("Optimize reads of Parquet-backed external tables from Hive by using Drill native readers instead of the Hive Serde interface. (Drill 1.2+)"));
+  public static final String HIVE_OPTIMIZE_SCAN_FILTER_PUSHDOWN= "store.hive.optimize_scan_filter_pushdown";
+  public static final OptionValidator HIVE_OPTIMIZE_SCAN_FILTER_PUSHDOWN_VALIDATOR =
+      new BooleanValidator(HIVE_OPTIMIZE_SCAN_FILTER_PUSHDOWN,
+          new OptionDescription("Optimize reads of ORC and parquet by predicate push down"));
   public static final String HIVE_CONF_PROPERTIES = "store.hive.conf.properties";
   public static final OptionValidator HIVE_CONF_PROPERTIES_VALIDATOR = new StringValidator(HIVE_CONF_PROPERTIES,
       new OptionDescription("Enables the user to specify Hive properties at the session level. Do not set the property values in quotes. Separate the property name and value by =. Separate each property with a new line (\\n). Example: set `store.hive.conf.properties` = 'hive.mapred.supports.subdirectories=true\\nmapred.input.dir.recursive=true'. (Drill 1.14+)"));
