@@ -20,6 +20,7 @@ package org.apache.drill.exec.store.hive.readers.filter;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.drill.common.FunctionNames;
 import org.apache.drill.common.expression.BooleanOperator;
+import org.apache.drill.common.expression.FieldReference;
 import org.apache.drill.common.expression.FunctionCall;
 import org.apache.drill.common.expression.LogicalExpression;
 import org.apache.drill.common.expression.SchemaPath;
@@ -28,11 +29,17 @@ import org.apache.drill.exec.store.hive.HiveScan;
 import org.apache.hadoop.hive.ql.io.sarg.PredicateLeaf;
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument;
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.HashMap;
 import java.util.List;
 
+import static org.apache.drill.exec.expr.fn.impl.MappifyUtility.fieldValue;
+
 public class HiveFilterBuilder extends AbstractExprVisitor<SearchArgument.Builder, Void,
     RuntimeException> {
+  private static final Logger logger = LoggerFactory.getLogger(HiveFilterBuilder.class);
 
   final private HiveScan groupScan;
 
@@ -55,7 +62,11 @@ public class HiveFilterBuilder extends AbstractExprVisitor<SearchArgument.Builde
 
   public HiveFilter parseTree() {
     SearchArgument.Builder accept = le.accept(this, null);
-    return new HiveFilter(accept.build());
+    SearchArgument searchArgument = builder.build();
+    if (accept != null) {
+      searchArgument = accept.build();
+    }
+    return new HiveFilter(searchArgument);
   }
 
   public boolean isAllExpressionsConverted() {
@@ -65,7 +76,19 @@ public class HiveFilterBuilder extends AbstractExprVisitor<SearchArgument.Builde
   @Override
   public SearchArgument.Builder visitUnknown(LogicalExpression e, Void value) throws RuntimeException {
     allExpressionsConverted = false;
-    return null;
+    if (e instanceof FieldReference) {
+      String fieldName = ((FieldReference) e).getAsNamePart().getName();
+      SqlTypeName sqlTypeName = dataTypeMap.get(fieldName);
+      switch (sqlTypeName) {
+      case BOOLEAN:
+        PredicateLeaf.Type valueType = convertLeafType(sqlTypeName);
+        builder.equals(fieldName, valueType, true).end();
+        break;
+      default:
+        builder.literal(SearchArgument.TruthValue.YES_NO_NULL);
+      }
+    }
+    return builder;
   }
 
   @Override
@@ -80,10 +103,12 @@ public class HiveFilterBuilder extends AbstractExprVisitor<SearchArgument.Builde
     if (HiveCompareFunctionsProcessor.isCompareFunction(functionName)) {
       if (nullComparatorSupported == null) {
         //For Support Hive Different versions
-        nullComparatorSupported = groupScan.getHiveConf().getBoolean("drill.hive.supports.null.comparator",true);
+        nullComparatorSupported =
+            groupScan.getHiveConf().getBoolean("drill.hive.supports.null" + ".comparator", true);
       }
       HiveCompareFunctionsProcessor processor =
-          HiveCompareFunctionsProcessor.createFunctionsProcessorInstance(call, nullComparatorSupported);
+          HiveCompareFunctionsProcessor.createFunctionsProcessorInstance(call,
+              nullComparatorSupported);
       if (processor.isSuccess()) {
         return buildSearchArgument(call, processor);
       }
@@ -95,11 +120,9 @@ public class HiveFilterBuilder extends AbstractExprVisitor<SearchArgument.Builde
       case FunctionNames.OR:
         builder.startOr();
         break;
-      case FunctionNames.NOT:
-        builder.startNot();
-        break;
       default:
-        throw new RuntimeException("Unsupported logical operator:" + functionName);
+        logger.warn("Unsupported logical operator:{} for push down", functionName);
+        return builder;
       }
       for (int i = 0; i < args.size(); ++i) {
         args.get(i).accept(this, null);
@@ -109,7 +132,8 @@ public class HiveFilterBuilder extends AbstractExprVisitor<SearchArgument.Builde
     return builder;
   }
 
-  private SearchArgument.Builder buildSearchArgument(FunctionCall call, HiveCompareFunctionsProcessor processor) {
+  private SearchArgument.Builder buildSearchArgument(FunctionCall call,
+      HiveCompareFunctionsProcessor processor) {
     String functionName = processor.getFunctionName();
     SchemaPath field = processor.getPath();
     Object fieldValue = processor.getValue();
@@ -146,6 +170,9 @@ public class HiveFilterBuilder extends AbstractExprVisitor<SearchArgument.Builde
     case "isNotNull":
     case "is not null":
       builder.startNot().isNull(field.getAsNamePart().getName(), valueType).end();
+      break;
+    case FunctionNames.NOT:
+      builder.startNot().equals(field.getAsNamePart().getName(), valueType, true).end();
       break;
     }
     return builder;

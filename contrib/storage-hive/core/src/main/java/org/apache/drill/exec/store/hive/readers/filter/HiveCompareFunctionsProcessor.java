@@ -246,6 +246,9 @@ public class HiveCompareFunctionsProcessor extends AbstractExprVisitor<Boolean, 
         .put(FunctionNames.GT, FunctionNames.LT)
         .put(FunctionNames.LE, FunctionNames.GE)
         .put(FunctionNames.LT, FunctionNames.GT)
+        .put(FunctionNames.NOT, FunctionNames.NOT)
+        .put(FunctionNames.IS_NOT_TRUE, FunctionNames.IS_NOT_TRUE)
+        .put(FunctionNames.IS_NOT_FALSE, FunctionNames.IS_NOT_FALSE)
         .build();
   }
 }
