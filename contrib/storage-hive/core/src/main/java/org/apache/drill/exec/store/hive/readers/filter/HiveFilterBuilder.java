@@ -37,23 +37,16 @@ import java.util.List;
 
 public class HiveFilterBuilder extends AbstractExprVisitor<SearchArgument.Builder, Void,
     RuntimeException> {
+
   private static final Logger logger = LoggerFactory.getLogger(HiveFilterBuilder.class);
 
-  final private HiveScan groupScan;
-
-  final private LogicalExpression le;
+  private final LogicalExpression le;
 
   private boolean allExpressionsConverted = false;
-
-  private static Boolean nullComparatorSupported;
-
   private SearchArgument.Builder builder;
-
   private HashMap<String, SqlTypeName> dataTypeMap;
 
-  HiveFilterBuilder(HiveScan groupScan, LogicalExpression le,
-      HashMap<String, SqlTypeName> dataTypeMap) {
-    this.groupScan = groupScan;
+  HiveFilterBuilder(LogicalExpression le, HashMap<String, SqlTypeName> dataTypeMap) {
     this.le = le;
     this.dataTypeMap = dataTypeMap;
     this.builder = SearchArgumentFactory.newBuilder();
@@ -106,14 +99,7 @@ public class HiveFilterBuilder extends AbstractExprVisitor<SearchArgument.Builde
     String functionName = call.getName();
     List<LogicalExpression> args = call.args();
     if (HiveCompareFunctionsProcessor.isCompareFunction(functionName) || HiveCompareFunctionsProcessor.isIsFunction(functionName) || HiveCompareFunctionsProcessor.isNot(call, functionName)) {
-      if (nullComparatorSupported == null) {
-        //For Support Hive Different versions
-        nullComparatorSupported =
-            groupScan.getHiveConf().getBoolean("drill.hive.supports.null" + ".comparator", true);
-      }
-      HiveCompareFunctionsProcessor processor =
-          HiveCompareFunctionsProcessor.createFunctionsProcessorInstance(call,
-              nullComparatorSupported);
+      HiveCompareFunctionsProcessor processor = HiveCompareFunctionsProcessor.createFunctionsProcessorInstance(call);
       if (processor.isSuccess()) {
         return buildSearchArgument(processor);
       }
@@ -136,7 +122,6 @@ public class HiveFilterBuilder extends AbstractExprVisitor<SearchArgument.Builde
     }
     return builder;
   }
-
 
   private SearchArgument.Builder buildSearchArgument(HiveCompareFunctionsProcessor processor) {
     String functionName = processor.getFunctionName();

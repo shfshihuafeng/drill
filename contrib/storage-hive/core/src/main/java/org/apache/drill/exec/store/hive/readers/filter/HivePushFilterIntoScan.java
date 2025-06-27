@@ -83,7 +83,6 @@ public abstract class HivePushFilterIntoScan extends StoragePluginOptimizerRule 
     }
   };
 
-
   public static final StoragePluginOptimizerRule FILTER_ON_PROJECT =
       new HivePushFilterIntoScan(RelOptHelper.some(FilterPrel.class,
           RelOptHelper.some(ProjectPrel.class, RelOptHelper.any(ScanPrel.class))),
@@ -137,7 +136,7 @@ public abstract class HivePushFilterIntoScan extends StoragePluginOptimizerRule 
 
     final LogicalExpression conditionExp = DrillOptiq.toDrill(new DrillParseContext(PrelUtil.getPlannerSettings(call.getPlanner())),
             scan, condition);
-    final HiveFilterBuilder orcFilterBuilder = new HiveFilterBuilder(groupScan, conditionExp, dataTypeMap);
+    final HiveFilterBuilder orcFilterBuilder = new HiveFilterBuilder(conditionExp, dataTypeMap);
     final HiveFilter newScanSpec = orcFilterBuilder.parseTree();
 
     if (newScanSpec == null) {
@@ -168,6 +167,5 @@ public abstract class HivePushFilterIntoScan extends StoragePluginOptimizerRule 
      * we could not convert the entire filter condition expression into an Hive orc filter.
      */
     call.transformTo(filter.copy(filter.getTraitSet(), ImmutableList.of(childRel)));
-
   }
 }

@@ -201,10 +201,8 @@ public class HiveStoragePlugin extends AbstractStoragePlugin {
             options.getBoolean(ExecConstants.HIVE_OPTIMIZE_PARQUET_SCAN_WITH_NATIVE_READER)) {
           ruleBuilder.add(ConvertHiveParquetScanToDrillParquetScan.INSTANCE);
         }
-        if (options.getBoolean(ExecConstants.HIVE_OPTIMIZE_SCAN_FILTER_PUSHDOWN)) {
-          ruleBuilder.add(HivePushFilterIntoScan.FILTER_ON_PROJECT);
-          ruleBuilder.add(HivePushFilterIntoScan.FILTER_ON_SCAN);
-        }
+        ruleBuilder.add(HivePushFilterIntoScan.FILTER_ON_PROJECT);
+        ruleBuilder.add(HivePushFilterIntoScan.FILTER_ON_SCAN);
         return ruleBuilder.build();
       }
       default:

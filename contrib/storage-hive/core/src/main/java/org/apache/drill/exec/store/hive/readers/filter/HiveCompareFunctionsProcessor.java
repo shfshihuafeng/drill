@@ -44,8 +44,53 @@ import java.util.regex.Pattern;
 
 public class HiveCompareFunctionsProcessor extends AbstractExprVisitor<Boolean, LogicalExpression, RuntimeException> {
 
-  // to check that function name starts with convert_from disregarding the case and has encoding after
-  private static final Pattern convertFromPattern = Pattern.compile(String.format("^%s(.+)", ConvertExpression.CONVERT_FROM), Pattern.CASE_INSENSITIVE);
+  private static final ImmutableSet<String> IS_FUNCTIONS_SET;
+  static {
+    ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+    IS_FUNCTIONS_SET = builder
+        .add(FunctionNames.IS_NOT_NULL)
+        .add("isNotNull")
+        .add("is not null")
+        .add(FunctionNames.IS_NULL)
+        .add("isNull")
+        .add("is null")
+        .add(FunctionNames.IS_TRUE)
+        .add(FunctionNames.IS_NOT_TRUE)
+        .add(FunctionNames.IS_FALSE)
+        .add(FunctionNames.IS_NOT_FALSE)
+        .build();
+
+  }
+
+  private static final ImmutableMap<String, String> COMPARE_FUNCTIONS_TRANSPOSE_MAP;
+  static {
+    ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
+    COMPARE_FUNCTIONS_TRANSPOSE_MAP = builder
+        // binary functions
+        .put(FunctionNames.LIKE, FunctionNames.LIKE)
+        .put(FunctionNames.EQ, FunctionNames.EQ)
+        .put(FunctionNames.NE, FunctionNames.NE)
+        .put(FunctionNames.GE, FunctionNames.LE)
+        .put(FunctionNames.GT, FunctionNames.LT)
+        .put(FunctionNames.LE, FunctionNames.GE)
+        .put(FunctionNames.LT, FunctionNames.GT)
+        .build();
+  }
+
+  private static final ImmutableSet<Class<? extends LogicalExpression>> VALUE_EXPRESSION_CLASSES;
+  static {
+    ImmutableSet.Builder<Class<? extends LogicalExpression>> builder = ImmutableSet.builder();
+    VALUE_EXPRESSION_CLASSES = builder
+        .add(BooleanExpression.class)
+        .add(DateExpression.class)
+        .add(DoubleExpression.class)
+        .add(FloatExpression.class)
+        .add(IntExpression.class)
+        .add(LongExpression.class)
+        .add(QuotedString.class)
+        .add(TimeExpression.class)
+        .build();
+  }
 
   private Object value;
   private PredicateLeaf.Type valueType;
@@ -56,20 +101,25 @@ public class HiveCompareFunctionsProcessor extends AbstractExprVisitor<Boolean, 
   public static boolean isCompareFunction(String functionName) {
     return COMPARE_FUNCTIONS_TRANSPOSE_MAP.keySet().contains(functionName);
   }
+
   public static boolean isIsFunction(String funcName) {
     return IS_FUNCTIONS_SET.contains(funcName);
   }
 
-  public static HiveCompareFunctionsProcessor createFunctionsProcessorInstance(FunctionCall call, boolean nullComparatorSupported) {
+  // shows whether function is simplified IS FALSE
+  public static boolean isNot(FunctionCall call, String funcName) {
+    return !call.args().isEmpty()
+        && FunctionNames.NOT.equals(funcName);
+  }
+
+  public static HiveCompareFunctionsProcessor createFunctionsProcessorInstance(FunctionCall call) {
     String functionName = call.getName();
     HiveCompareFunctionsProcessor evaluator = new HiveCompareFunctionsProcessor(functionName);
 
-    return createFunctionsProcessorInstanceInternal(call, nullComparatorSupported, evaluator);
+    return createFunctionsProcessorInstanceInternal(call, evaluator);
   }
 
-  protected static <T extends HiveCompareFunctionsProcessor> T createFunctionsProcessorInstanceInternal(FunctionCall call,
-                                                                                                    boolean nullComparatorSupported,
-                                                                                                    T evaluator) {
+  protected static <T extends HiveCompareFunctionsProcessor> T createFunctionsProcessorInstanceInternal(FunctionCall call, T evaluator) {
     LogicalExpression nameArg = call.arg(0);
     LogicalExpression valueArg = call.argCount() >= 2 ? call.arg(1) : null;
     if (valueArg != null) { // binary function
@@ -80,7 +130,7 @@ public class HiveCompareFunctionsProcessor extends AbstractExprVisitor<Boolean, 
         evaluator.setFunctionName(COMPARE_FUNCTIONS_TRANSPOSE_MAP.get(evaluator.getFunctionName()));
       }
       evaluator.setSuccess(nameArg.accept(evaluator, valueArg));
-    } else if (nullComparatorSupported && call.arg(0) instanceof SchemaPath) {
+    } else if (call.arg(0) instanceof SchemaPath) {
       evaluator.setPath((SchemaPath) nameArg);
     }
     evaluator.setSuccess(true);
@@ -213,57 +263,5 @@ public class HiveCompareFunctionsProcessor extends AbstractExprVisitor<Boolean, 
     }
     return false;
   }
-
-  private static final ImmutableSet<Class<? extends LogicalExpression>> VALUE_EXPRESSION_CLASSES;
-  static {
-    ImmutableSet.Builder<Class<? extends LogicalExpression>> builder = ImmutableSet.builder();
-    VALUE_EXPRESSION_CLASSES = builder
-        .add(BooleanExpression.class)
-        .add(DateExpression.class)
-        .add(DoubleExpression.class)
-        .add(FloatExpression.class)
-        .add(IntExpression.class)
-        .add(LongExpression.class)
-        .add(QuotedString.class)
-        .add(TimeExpression.class)
-        .build();
-  }
-
-  private static final ImmutableMap<String, String> COMPARE_FUNCTIONS_TRANSPOSE_MAP;
-  static {
-    ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
-    COMPARE_FUNCTIONS_TRANSPOSE_MAP = builder
-        // binary functions
-        .put(FunctionNames.LIKE, FunctionNames.LIKE)
-        .put(FunctionNames.EQ, FunctionNames.EQ)
-        .put(FunctionNames.NE, FunctionNames.NE)
-        .put(FunctionNames.GE, FunctionNames.LE)
-        .put(FunctionNames.GT, FunctionNames.LT)
-        .put(FunctionNames.LE, FunctionNames.GE)
-        .put(FunctionNames.LT, FunctionNames.GT)
-        .build();
-  }
-
-  // shows whether function is simplified IS FALSE
-  public static boolean isNot(FunctionCall call, String funcName) {
-    return !call.args().isEmpty()
-        && FunctionNames.NOT.equals(funcName);
-  }
-  private static final ImmutableSet<String> IS_FUNCTIONS_SET;
-  static {
-    ImmutableSet.Builder<String> builder = ImmutableSet.builder();
-    IS_FUNCTIONS_SET = builder
-        .add(FunctionNames.IS_NOT_NULL)
-        .add("isNotNull")
-        .add("is not null")
-        .add(FunctionNames.IS_NULL)
-        .add("isNull")
-        .add("is null")
-        .add(FunctionNames.IS_TRUE)
-        .add(FunctionNames.IS_NOT_TRUE)
-        .add(FunctionNames.IS_FALSE)
-        .add(FunctionNames.IS_NOT_FALSE)
-        .build();
-  }
-
 }
+
